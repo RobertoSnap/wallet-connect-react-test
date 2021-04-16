@@ -8,7 +8,9 @@ export const WalletConnect: React.FC<Props> = ({ ...props }) => {
     const [accounts, setAccounts] = useState<string[]>([]);
 
     const handleConnect = async () => {
-        const web3Provider = new WalletConnectWeb3Provider()
+        const web3Provider = new WalletConnectWeb3Provider({
+            relayProvider: "wss://relay.walletconnect.org"
+        })
         web3Provider.on("uri", (uri) => {
             setUri(uri)
         })
@@ -29,7 +31,7 @@ export const WalletConnect: React.FC<Props> = ({ ...props }) => {
                     <a target={"_blank"} rel="noreferrer" href={"http://localhost:3001?token=" + uri}>Koble til</a>
                 </div>
             }
-            {accounts &&
+            {accounts.length > 0 &&
                 <div data-testid="wallet-connect-accounts">
                     <p ></p>
                 </div>

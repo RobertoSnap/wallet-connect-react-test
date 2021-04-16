@@ -1,13 +1,14 @@
 import WalletConnect, { CLIENT_EVENTS } from "@walletconnect/client";
 import { ethers } from "ethers";
 import WalletConnectClient from "@walletconnect/client";
-import { SessionTypes } from "@walletconnect/types";
+import { AppMetadata, SessionTypes } from "@walletconnect/types";
 
 export interface WalletClientOptions {
   privateKey: string;
   chainId: number;
   rpcURL: string;
   relayProvider: string;
+  metadata: AppMetadata;
 }
 
 export class WalletClient {
@@ -16,25 +17,37 @@ export class WalletClient {
   readonly chainId: number;
   readonly walletConnectClient: Promise<WalletConnect>;
   readonly listener?: Promise<void>;
+  readonly options: WalletClientOptions;
 
-  constructor(options: Partial<WalletClientOptions> = {}) {
-    const wallet = options.privateKey
-      ? new ethers.Wallet(options.privateKey)
-      : ethers.Wallet.createRandom();
-    this.chainId = options.chainId ? options.chainId : 123;
-    const rpcURL = options.rpcURL ? options.rpcURL : "http://localhost:8545";
+  constructor(_options: Partial<WalletClientOptions> = {}) {
+    const options: WalletClientOptions = {
+      privateKey:
+        "0xaa3e538de51965294585ec80092ce534d3042c0b8f47e5c17b8c8259ddf6c79c",
+      chainId: 123,
+      rpcURL: "http://localhost:8545",
+      relayProvider: "ws://0.0.0.0:5555",
+      metadata: {
+        name: "Test wallet",
+        description: "Just a Wallet client for testing",
+        icons: ["https://walletconnect.org/walletconnect-logo.png"],
+        url: "https://walletconnect.io",
+      },
+      ..._options,
+    };
+    this.options = options;
+    const wallet = new ethers.Wallet(options.privateKey);
+    this.chainId = options.chainId;
+    const rpcURL = options.rpcURL;
     this.provider = new ethers.providers.JsonRpcProvider(rpcURL);
     this.signer = wallet.connect(this.provider);
     this.walletConnectClient = WalletConnectClient.init({
-      relayProvider: options.relayProvider
-        ? options.relayProvider
-        : "ws://0.0.0.0:5555",
+      relayProvider: options.relayProvider,
       controller: true,
       // storageOptions: {
       //   database: "WalletClientDatabase.db",
       //   tableName: "test1",
       // },
-      logger: "warn",
+      // logger: "warn",
     });
     this.listener = this.listen();
   }
@@ -52,18 +65,12 @@ export class WalletClient {
       wc.on(
         CLIENT_EVENTS.session.proposal,
         async (proposal: SessionTypes.Proposal) => {
-          // user should be prompted to approve the proposed session permissions displaying also dapp metadata
-          console.log("session.proposal", proposal);
+          console.log("MOBILE: session.proposal", proposal);
           const response: SessionTypes.Response = {
             state: {
               accounts: [`${this.signer.address + "@eip155:" + this.chainId}`],
             },
-            metadata: {
-              name: "Test Wallet",
-              description: "Test wallet desc",
-              icons: ["no icon"],
-              url: "some url",
-            },
+            metadata: this.options.metadata,
           };
           const session = await wc.approve({ proposal, response });
         }

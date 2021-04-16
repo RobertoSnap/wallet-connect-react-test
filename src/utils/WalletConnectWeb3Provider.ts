@@ -37,11 +37,12 @@ export class WalletConnectWeb3Provider extends ethers.providers
     };
     this.walletConnectClient = WalletConnectClient.init({
       relayProvider: options.relayProvider,
-      logger: "warn",
+      // logger: "warn",
     });
     this.rpcConfig = options.rpc;
     this.listener = this.listen();
   }
+
   private getRPCUrl(rpcConfig?: RPCConfig, chainId?: keyof InfuraNetworks) {
     return WalletConnectWeb3Provider._getRPCUrl(rpcConfig, chainId);
   }
@@ -85,12 +86,12 @@ export class WalletConnectWeb3Provider extends ethers.providers
           this.emit("uri", uri);
         }
       );
-      wc.on(CLIENT_EVENTS.pairing.created, async (payload: any) => {
-        console.log("CLIENT_EVENTS.pairing.created", payload);
-      });
-      wc.on(CLIENT_EVENTS.pairing.updated, async (payload: any) => {
-        console.log("CLIENT_EVENTS.pairing.updated", payload);
-      });
+      // wc.on(CLIENT_EVENTS.pairing.created, async (payload: any) => {
+      //   console.log("CLIENT_EVENTS.pairing.created", payload);
+      // });
+      // wc.on(CLIENT_EVENTS.pairing.updated, async (payload: any) => {
+      //   console.log("CLIENT_EVENTS.pairing.updated", payload);
+      // });
       wc.on(
         CLIENT_EVENTS.pairing.deleted,
         async (proposal: PairingTypes.DeleteParams) => {
@@ -107,8 +108,7 @@ export class WalletConnectWeb3Provider extends ethers.providers
     await this.walletConnectClient;
     console.log("enable - create session");
     const session = await this.createSession();
-    console.log("Session created", session);
-    console.log("update state");
+    console.log("dAPP: Session created", session);
     this.updateState(session.state);
     return this.accounts;
   };
@@ -129,12 +129,12 @@ export class WalletConnectWeb3Provider extends ethers.providers
       metadata: {
         name: "Brreg - Forvalt",
         description: "Example Dapp",
-        url: "#",
+        url: "http://argent.io",
         icons: ["https://walletconnect.org/walletconnect-logo.png"],
       },
       permissions: {
         blockchain: {
-          chains: ["eip155:2018"],
+          chains: ["eip155:123"],
         },
         jsonrpc: {
           methods: [

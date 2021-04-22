@@ -1,7 +1,14 @@
 import { ethers } from "ethers";
 import WalletConnectClient, { CLIENT_EVENTS } from "@walletconnect/client";
-import { PairingTypes, BlockchainTypes } from "@walletconnect/types";
+import {
+  PairingTypes,
+  BlockchainTypes,
+  SessionTypes,
+} from "@walletconnect/types";
 import { InfuraNetworks, INFURA_NETWORKS } from "./WalletConnectConstants";
+import { Session } from "node:inspector";
+import { Deferrable } from "ethers/lib/utils";
+import { WalletConnectSigner } from "./WalletConnectSigner";
 const DEFAULT_RPC_URL = "http://localhost:8545";
 
 type RPCConfig =
@@ -30,14 +37,14 @@ export class WalletConnectWeb3Provider extends ethers.providers
   constructor(_options: Partial<WalletConnectWeb3ProviderOptions> = {}) {
     super(WalletConnectWeb3Provider._getRPCUrl(_options.rpc, _options.chainId));
     const options: WalletConnectWeb3ProviderOptions = {
-      relayProvider: "ws://0.0.0.0:5555",
+      relayProvider: "wss://relay.walletconnect.org",
       rpc: DEFAULT_RPC_URL,
       chainId: 1,
       ..._options,
     };
     this.walletConnectClient = WalletConnectClient.init({
       relayProvider: options.relayProvider,
-      // logger: "warn",
+      logger: "warn",
     });
     this.rpcConfig = options.rpc;
     this.listener = this.listen();
@@ -73,10 +80,27 @@ export class WalletConnectWeb3Provider extends ethers.providers
     return rpcConfig[_chainId];
   }
 
+  // async sendTransaction(
+  //   transaction: Deferrable<ethers.providers.TransactionRequest>
+  // ): Promise<ethers.providers.TransactionResponse> {
+  //   const wc = await this.walletConnectClient;
+  //   const res: string = await wc.request({
+  //     request: {
+  //       method: "eth_sendTransaction",
+  //       params: transaction,
+  //     },
+  //     topic: wc.session.topics[0],
+  //   });
+  //   console.log("send tx res", res);
+  //   const txRes = await this.getTransaction(res);
+  //   return txRes;
+  // }
+
   private listen = (): Promise<void> => {
     return new Promise(async (resolve, reject) => {
       const wc = await this.walletConnectClient;
       console.log("dAPP listening");
+
       wc.on(
         CLIENT_EVENTS.pairing.proposal,
         async (proposal: PairingTypes.Proposal) => {
@@ -89,15 +113,26 @@ export class WalletConnectWeb3Provider extends ethers.providers
       // wc.on(CLIENT_EVENTS.pairing.created, async (payload: any) => {
       //   console.log("CLIENT_EVENTS.pairing.created", payload);
       // });
-      // wc.on(CLIENT_EVENTS.pairing.updated, async (payload: any) => {
-      //   console.log("CLIENT_EVENTS.pairing.updated", payload);
-      // });
+      wc.on(CLIENT_EVENTS.pairing.updated, async (payload: any) => {
+        console.log("CLIENT_EVENTS.pairing.updated", payload);
+      });
+      wc.on(
+        CLIENT_EVENTS.session.updated,
+        async (session: SessionTypes.Settled) => {
+          console.log("CLIENT_EVENTS.session.updated", session);
+          this.updateState(session);
+        }
+      );
       wc.on(
         CLIENT_EVENTS.pairing.deleted,
         async (proposal: PairingTypes.DeleteParams) => {
           reject(proposal.reason);
         }
       );
+      wc.on(CLIENT_EVENTS.session.created, (session: SessionTypes.Settled) => {
+        console.log("EVENT", "session_created");
+        console.log(session);
+      });
       wc.on("modal_closed", () => {
         reject("User closed modal");
       });
@@ -105,16 +140,14 @@ export class WalletConnectWeb3Provider extends ethers.providers
   };
 
   enable = async () => {
-    await this.walletConnectClient;
-    console.log("enable - create session");
+    const wc = await this.walletConnectClient;
     const session = await this.createSession();
-    console.log("dAPP: Session created", session);
-    this.updateState(session.state);
+    this.updateState(session);
     return this.accounts;
   };
 
-  async updateState(state: BlockchainTypes.State) {
-    const { accounts } = state;
+  async updateState(session: SessionTypes.Settled) {
+    const { accounts } = session.state;
     // Check if accounts changed and trigger event
     if (!this.accounts || (accounts && this.accounts !== accounts)) {
       this.accounts = accounts;
@@ -125,6 +158,26 @@ export class WalletConnectWeb3Provider extends ethers.providers
 
   createSession = async () => {
     const wc = await this.walletConnectClient;
+
+    // Do we need to create a new session
+    const sessions_string = localStorage.getItem(
+      "wc@2:client//session:settled"
+    );
+    const sessions = wc.session.values;
+    if (sessions.length > 0) {
+      try {
+        // Todo Find out which session is last and check if its not expired
+        const selectedSession = sessions[0];
+        await wc.session.settled.set(selectedSession.topic, selectedSession, {
+          relay: selectedSession.relay,
+        });
+        const session = await wc.session.get(sessions[0].topic);
+        return session;
+      } catch (error) {
+        console.log("Couldt not set old session, creating new");
+      }
+    }
+
     return await wc.connect({
       metadata: {
         name: "Brreg - Forvalt",
@@ -134,7 +187,7 @@ export class WalletConnectWeb3Provider extends ethers.providers
       },
       permissions: {
         blockchain: {
-          chains: ["eip155:123"],
+          chains: ["eip155:2018"],
         },
         jsonrpc: {
           methods: [
